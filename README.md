@@ -1,5 +1,15 @@
 # Open Mission Control
 
+> [!NOTE]
+> ### 🚀 Enhanced Fork
+> This is an enhanced fork of the original [nohackjustnoobb/OpenMissionControl](https://github.com/nohackjustnoobb/OpenMissionControl).
+>
+> [![Latest Release](https://img.shields.io/github/v/release/al3x1337/OpenMissionControl?display_name=tag&label=Download%20DMG&color=indigo)](https://github.com/al3x1337/OpenMissionControl/releases/latest)
+>
+> **Enhancements Included in this Fork:**
+> - 🖥️ **Multi-Monitor Display Spaces Support**: Resolves missing overlay controls on secondary, vertical, and offset displays ([Upstream PR #13](https://github.com/nohackjustnoobb/OpenMissionControl/pull/13)).
+> - 👁️ **Hide Application Feature**: Adds an indigo visual `eye.slash` button and `⌘H` shortcut to hide apps directly from Mission Control, matching Mission Control Plus ([PR #2](https://github.com/al3x1337/OpenMissionControl/pull/2)).
+
 **Open Mission Control** is an open-source alternative to [Mission Control Plus](https://www.fadel.io/missioncontrolplus). It aims to enhance the macOS Mission Control experience by adding window management controls directly to the Mission Control view.
 
 ![Demo](demo.gif)
@@ -11,15 +21,17 @@
   - **Close**: Close windows directly from Mission Control.
   - **Minimize**: Minimize windows without leaving the view.
   - **Zoom/Maximize**: Quickly resize windows.
+  - **Hide**: Hide applications directly from Mission Control.
 - **Customizable Buttons**: Toggle which control buttons appear via app settings.
 - **Keyboard Shortcuts**: Hover over a window and use shortcuts to quickly manage it:
   - **Quit**: `⌘Q`
   - **Close**: `⌘W`
   - **Minimize**: `⌘M`
   - **Maximize/Zoom**: `⌘F`
+  - **Hide**: `⌘H`
 - **Mouse Shortcuts**: Hover over a window and assign an action to either mouse shortcut:
-  - **Right-click**: Minimize, Maximize, Close, Quit, or None.
-  - **Middle-click**: Minimize, Maximize, Close, Quit, or None.
+  - **Right-click**: Minimize, Maximize, Close, Quit, Hide, or None.
+  - **Middle-click**: Minimize, Maximize, Close, Quit, Hide, or None.
 
 ## Installation & Usage
 
