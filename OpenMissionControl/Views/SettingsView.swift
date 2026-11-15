@@ -197,6 +197,8 @@ struct SettingsView: View {
         SettingsDefaults.showMinimizeButton
     @AppStorage(SettingsDefaults.Key.showZoomButton) private var showZoomButton: Bool =
         SettingsDefaults.showZoomButton
+    @AppStorage(SettingsDefaults.Key.showHideButton) private var showHideButton: Bool =
+        SettingsDefaults.showHideButton
     @AppStorage(SettingsDefaults.Key.overlayTheme) private var currentTheme: OverlayTheme =
         SettingsDefaults.overlayTheme
     @AppStorage(SettingsDefaults.Key.overlayButtonScale) private var overlayButtonScale: Double =
@@ -213,6 +215,8 @@ struct SettingsView: View {
         SettingsDefaults.shortcutMinimize
     @AppStorage(SettingsDefaults.Key.shortcutMaximize) private var shortcutMaximize: Bool =
         SettingsDefaults.shortcutMaximize
+    @AppStorage(SettingsDefaults.Key.shortcutHide) private var shortcutHide: Bool =
+        SettingsDefaults.shortcutHide
     @AppStorage(SettingsDefaults.Key.shortcutActivateWindow) private var shortcutActivateWindow:
         Bool = SettingsDefaults.shortcutActivateWindow
     @AppStorage(SettingsDefaults.Key.rightClickAction) private var rightClickAction: WindowAction =
@@ -320,10 +324,15 @@ struct SettingsView: View {
                         SettingToggleRow(
                             icon: .fullscreen, iconColor: solidColor(color: .green),
                             title: "Maximize Button", isOn: $showZoomButton)
+
+                        SettingsDivider()
+                        SettingToggleRow(
+                            icon: .system("eye.slash"), iconColor: solidColor(color: .indigo),
+                            title: "Hide Button", isOn: $showHideButton)
                     }
                 }
 
-                if showQuitButton || showCloseButton || showMinimizeButton || showZoomButton {
+                if showQuitButton || showCloseButton || showMinimizeButton || showZoomButton || showHideButton {
                     VStack(alignment: .leading, spacing: 6) {
                         sectionHeader("Preview")
 
@@ -362,6 +371,8 @@ struct SettingsView: View {
                         SettingToggleRow(title: "Minimize (⌘M)", isOn: $shortcutMinimize)
                         SettingsDivider()
                         SettingToggleRow(title: "Maximize (⌘F)", isOn: $shortcutMaximize)
+                        SettingsDivider()
+                        SettingToggleRow(title: "Hide (⌘H)", isOn: $shortcutHide)
                     }
                 }
 

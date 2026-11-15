@@ -16,6 +16,7 @@ enum SettingsDefaults {
         static let showCloseButton = "showCloseButton"
         static let showMinimizeButton = "showMinimizeButton"
         static let showZoomButton = "showZoomButton"
+        static let showHideButton = "showHideButton"
 
         static let overlayTheme = "overlayTheme"
         static let overlayButtonScale = "overlayButtonScale"
@@ -27,6 +28,7 @@ enum SettingsDefaults {
         static let shortcutClose = "shortcutClose"
         static let shortcutMinimize = "shortcutMinimize"
         static let shortcutMaximize = "shortcutMaximize"
+        static let shortcutHide = "shortcutHide"
         static let shortcutActivateWindow = "shortcutActivateWindow"
 
         static let rightClickAction = "rightClickAction"
@@ -40,6 +42,7 @@ enum SettingsDefaults {
     static let showCloseButton: Bool = true
     static let showMinimizeButton: Bool = true
     static let showZoomButton: Bool = true
+    static let showHideButton: Bool = false
 
     static var overlayTheme: OverlayTheme {
         if #available(macOS 26.0, *) { return .liquidGlass }
@@ -55,6 +58,7 @@ enum SettingsDefaults {
     static let shortcutClose: Bool = false
     static let shortcutMinimize: Bool = false
     static let shortcutMaximize: Bool = false
+    static let shortcutHide: Bool = false
     static let shortcutActivateWindow: Bool = true
 
     static let rightClickAction: WindowAction = .none

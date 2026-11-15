@@ -20,6 +20,8 @@ struct MinimalOverlayView: View {
         SettingsDefaults.showMinimizeButton
     @AppStorage(SettingsDefaults.Key.showZoomButton) private var showZoomButton: Bool =
         SettingsDefaults.showZoomButton
+    @AppStorage(SettingsDefaults.Key.showHideButton) private var showHideButton: Bool =
+        SettingsDefaults.showHideButton
 
     var body: some View {
         HStack(spacing: sizing.spacing) {
@@ -30,6 +32,8 @@ struct MinimalOverlayView: View {
             if showMinimizeButton { overlayIcon(icon: .system("minus"), iconSize: 13) }
 
             if showZoomButton { overlayIcon(icon: .fullscreen, iconSize: 12) }
+
+            if showHideButton { overlayIcon(icon: .system("eye.slash"), iconSize: 12) }
         }
         .padding(.horizontal, sizing.horizontalPadding).padding(.vertical, sizing.verticalPadding)
         .background(Capsule().fill(Color(NSColor.windowBackgroundColor).opacity(0.95)))

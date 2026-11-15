@@ -25,12 +25,14 @@ enum WindowAction: Int, CaseIterable, DisplayNameable {
     case zoom = 2
     case close = 3
     case quit = 4
+    case hide = 5
 
     var displayName: String {
         switch self { case .none: return "None" case .minimize: return "Minimize" case .zoom:
             return "Maximize"
             case .close: return "Close"
             case .quit: return "Quit"
+            case .hide: return "Hide"
         }
     }
 }
@@ -70,6 +72,8 @@ final class OpenMissionControlCore: ObservableObject {
         SettingsDefaults.shortcutMinimize
     @AppStorage(SettingsDefaults.Key.shortcutMaximize) private var shortcutMaximize: Bool =
         SettingsDefaults.shortcutMaximize
+    @AppStorage(SettingsDefaults.Key.shortcutHide) private var shortcutHide: Bool =
+        SettingsDefaults.shortcutHide
     @AppStorage(SettingsDefaults.Key.shortcutActivateWindow) private var shortcutActivateWindow:
         Bool = SettingsDefaults.shortcutActivateWindow
     @AppStorage(SettingsDefaults.Key.rightClickAction) private var rightClickAction: WindowAction =
@@ -141,6 +145,11 @@ final class OpenMissionControlCore: ObservableObject {
             self, selector: #selector(activeSpaceDidChange),
             name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
 
+        // Listen for display changes to update per-screen overlay windows
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(screenParametersDidChange),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil)
+
         logger.info("OpenMissionControlCore started.")
     }
 
@@ -150,6 +159,8 @@ final class OpenMissionControlCore: ObservableObject {
         MissionControlMonitor.shared.stop()
         InputEventMonitor.shared.stop()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
+        NotificationCenter.default.removeObserver(
+            self, name: NSApplication.didChangeScreenParametersNotification, object: nil)
         hideOverlay()
         destroyOverlayWindow()
         isRunning = false
@@ -175,6 +186,13 @@ final class OpenMissionControlCore: ObservableObject {
         logger.info("Active space changed, recreating windows and overlay.")
 
         recreateOverlay()
+    }
+
+    @objc private func screenParametersDidChange() {
+        logger.info("Screen parameters changed, recreating overlay windows.")
+
+        destroyOverlayWindow()
+        prepareOverlayWindow()
     }
 
     // MARK: - Mouse Event Handling
@@ -219,7 +237,7 @@ final class OpenMissionControlCore: ObservableObject {
             guard overlayRect?.contains(location) != true else { return }
 
             // Keep the hit-test state until mouse-up, but hide the visual overlay while the button is held so a drag cannot cause it to reappear.
-            overlayContentView?.isHidden = true
+            for surface in overlaySurfaces { surface.contentView.isHidden = true }
             isOverlayHovered = false
         }
 
@@ -272,6 +290,11 @@ final class OpenMissionControlCore: ObservableObject {
             case .f:
                 if shortcutMaximize {
                     performWindowAction(window: window, action: .zoom, instigator: .keyboard)
+                    return false
+                }
+            case .h:
+                if shortcutHide {
+                    performWindowAction(window: window, action: .hide, instigator: .keyboard)
                     return false
                 }
             default: break
@@ -342,8 +365,12 @@ final class OpenMissionControlCore: ObservableObject {
 
     // MARK: - Overlay Management
 
-    private var overlayWindow: NSWindow?
-    private var overlayContentView: NSHostingView<OverlayView>?
+    private struct OverlaySurface {
+        let window: NSWindow
+        let contentView: NSHostingView<OverlayView>
+    }
+
+    private var overlaySurfaces: [OverlaySurface] = []
     private var previousWindowFrames: [CGWindowID: CGRect]?
     private(set) var overlayRect: CGRect?
     private(set) var hoveredWindow: [String: Any]?
@@ -377,8 +404,9 @@ final class OpenMissionControlCore: ObservableObject {
                 // Check if mouse is within this window's bounds
                 if windowFrame.contains(mouseLocation) {
                     // Convert CG top-left coordinates to NSWindow bottom-left coordinates
-                    let screenHeight =
-                        NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
+                    let primaryScreenHeight =
+                        NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height
+                        ?? NSScreen.screens.first?.frame.height ?? 0
                     let sizing = OverlaySizing(scale: overlayButtonScale)
 
                     let showQuit =
@@ -394,20 +422,45 @@ final class OpenMissionControlCore: ObservableObject {
                     let showZoom =
                         UserDefaults.standard.object(forKey: SettingsDefaults.Key.showZoomButton)
                         as? Bool ?? SettingsDefaults.showZoomButton
-                    let buttonCount = [showQuit, showClose, showMinimize, showZoom].filter { $0 }
+                    let showHide =
+                        UserDefaults.standard.object(forKey: SettingsDefaults.Key.showHideButton)
+                        as? Bool ?? SettingsDefaults.showHideButton
+                    let buttonCount = [showQuit, showClose, showMinimize, showZoom, showHide].filter { $0 }
                         .count
                     let overlayWidth = sizing.width(buttonCount: buttonCount)
                     let windowWidth = overlayWidth + 2 * sizing.margin
                     let windowHeight = sizing.height + 2 * sizing.margin
-                    let convertedY = screenHeight - y - windowHeight
+                    let convertedY = primaryScreenHeight - y - windowHeight
 
                     let newFrame = NSRect(
                         x: x, y: convertedY, width: windowWidth, height: windowHeight)
-                    if let overlayWindow, let overlayContentView {
-                        overlayContentView.frame = OverlayWindowPositioner.setFrame(
-                            newFrame, for: overlayWindow, cgOrigin: CGPoint(x: x, y: y))
-                        overlayContentView.isHidden = false
-                        overlayContentView.needsDisplay = true
+
+                    let targetSurface =
+                        overlaySurfaces.first { surface in
+                            guard
+                                let screen = surface.window.screen
+                                    ?? NSScreen.screens.first(where: {
+                                        $0.frame.intersects(surface.window.frame)
+                                    })
+                            else { return false }
+                            let cgScreenFrame = CGRect(
+                                x: screen.frame.origin.x,
+                                y: primaryScreenHeight - screen.frame.origin.y
+                                    - screen.frame.height, width: screen.frame.width,
+                                height: screen.frame.height)
+                            return cgScreenFrame.contains(mouseLocation)
+                                || cgScreenFrame.intersects(windowFrame)
+                        } ?? overlaySurfaces.first
+
+                    for surface in overlaySurfaces {
+                        if surface.window === targetSurface?.window, let targetSurface {
+                            targetSurface.contentView.frame = OverlayWindowPositioner.setFrame(
+                                newFrame, for: targetSurface.window, cgOrigin: CGPoint(x: x, y: y))
+                            targetSurface.contentView.isHidden = false
+                            targetSurface.contentView.needsDisplay = true
+                        } else {
+                            surface.contentView.isHidden = true
+                        }
                     }
 
                     let cgOverlayRect = CGRect(
@@ -421,7 +474,7 @@ final class OpenMissionControlCore: ObservableObject {
 
             hoveredWindow = nil
             overlayRect = nil
-            overlayContentView?.isHidden = true
+            for surface in overlaySurfaces { surface.contentView.isHidden = true }
         }
     }
 
@@ -444,6 +497,9 @@ final class OpenMissionControlCore: ObservableObject {
         let showZoom =
             UserDefaults.standard.object(forKey: SettingsDefaults.Key.showZoomButton) as? Bool
             ?? SettingsDefaults.showZoomButton
+        let showHide =
+            UserDefaults.standard.object(forKey: SettingsDefaults.Key.showHideButton) as? Bool
+            ?? SettingsDefaults.showHideButton
 
         if showQuit {
             if localX >= currentX, localX <= currentX + sizing.buttonSize {
@@ -472,6 +528,13 @@ final class OpenMissionControlCore: ObservableObject {
             }
             currentX += sizing.buttonStride
         }
+
+        if showHide {
+            if localX >= currentX, localX <= currentX + sizing.buttonSize {
+                performWindowAction(window: window, action: .hide, instigator: .overlay)
+            }
+            currentX += sizing.buttonStride
+        }
     }
 
     private func performWindowAction(
@@ -493,6 +556,10 @@ final class OpenMissionControlCore: ObservableObject {
             case .close:
                 logger.info("\(instigator.displayName) Close triggered on window: \(windowName)")
                 performOSWindowAction(window: window, action: kAXCloseButtonAttribute)
+            case .hide:
+                logger.info("\(instigator.displayName) Hide triggered on window: \(windowName)")
+                hideApplication(window: window)
+                hideOverlay(keepInputMonitoring: true)
             default: break
         }
     }
@@ -550,6 +617,23 @@ final class OpenMissionControlCore: ObservableObject {
         }
     }
 
+    private func hideApplication(window: [String: Any]) {
+        guard let pid = window[kCGWindowOwnerPID as String] as? pid_t else {
+            logger.error("Failed to get PID for window: \(window)")
+            return
+        }
+
+        if let app = NSRunningApplication(processIdentifier: pid) {
+            if app.hide() {
+                logger.info("Hidden application with PID \(pid)")
+            } else {
+                logger.warning("Failed to hide application with PID \(pid)")
+            }
+        } else {
+            logger.error("Failed to get NSRunningApplication for PID \(pid)")
+        }
+    }
+
     func showOverlay() {
         prepareOverlayWindow()
 
@@ -573,7 +657,7 @@ final class OpenMissionControlCore: ObservableObject {
         isOverlayShown = framesAreStable
 
         guard framesAreStable else {
-            overlayContentView?.isHidden = true
+            for surface in overlaySurfaces { surface.contentView.isHidden = true }
             overlayRect = nil
             hoveredWindow = nil
             isOverlayHovered = false
@@ -601,7 +685,7 @@ final class OpenMissionControlCore: ObservableObject {
     func hideOverlay(keepInputMonitoring: Bool = false) {
         previousWindowFrames = nil
         isOverlayShown = false
-        overlayContentView?.isHidden = true
+        for surface in overlaySurfaces { surface.contentView.isHidden = true }
         overlayRect = nil
         hoveredWindow = nil
         isOverlayHovered = false
@@ -620,53 +704,47 @@ final class OpenMissionControlCore: ObservableObject {
     }
 
     private func prepareOverlayWindow() {
-        guard overlayWindow == nil else { return }
+        guard overlaySurfaces.isEmpty else { return }
 
-        let desktopFrame = NSScreen.screens.reduce(CGRect.null) { frame, screen in
-            frame.union(screen.frame)
+        for screen in NSScreen.screens {
+            let initialFrame = CGRect(
+                origin: screen.frame.origin, size: OverlayWindowPositioner.initialWindowSize)
+            let window = NSWindow(
+                contentRect: initialFrame, styleMask: [.borderless], backing: .buffered,
+                defer: false)
+            window.level = .screenSaver
+            window.collectionBehavior = [
+                .canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle
+            ]
+            window.backgroundColor = .clear
+            window.isOpaque = false
+            window.hasShadow = false
+            window.animationBehavior = .none
+            window.ignoresMouseEvents = true
+            window.isReleasedWhenClosed = false
+
+            let contentView = NSView(frame: NSRect(origin: .zero, size: initialFrame.size))
+            contentView.wantsLayer = true
+            contentView.layer?.backgroundColor = NSColor.clear.cgColor
+            window.contentView = contentView
+
+            let overlayView = NSHostingView(rootView: OverlayView())
+            overlayView.isHidden = true
+            contentView.addSubview(overlayView)
+
+            // The surface must be ordered before Mission Control starts.
+            // Keep it compact so it cannot obscure desktop previews or create desktop-wide tracking areas.
+            window.orderFrontRegardless()
+            overlaySurfaces.append(OverlaySurface(window: window, contentView: overlayView))
         }
-        guard !desktopFrame.isNull, !desktopFrame.isEmpty else {
-            logger.error("Could not determine the desktop frame for the overlay window.")
-            return
-        }
-
-        let initialFrame = CGRect(
-            origin: desktopFrame.origin, size: OverlayWindowPositioner.initialWindowSize)
-        let window = NSWindow(
-            contentRect: initialFrame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.level = .screenSaver
-        window.collectionBehavior = [
-            .canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle
-        ]
-        window.backgroundColor = .clear
-        window.isOpaque = false
-        window.hasShadow = false
-        window.animationBehavior = .none
-        window.ignoresMouseEvents = true
-        window.isReleasedWhenClosed = false
-
-        let contentView = NSView(frame: NSRect(origin: .zero, size: initialFrame.size))
-        contentView.wantsLayer = true
-        contentView.layer?.backgroundColor = NSColor.clear.cgColor
-        window.contentView = contentView
-
-        let overlayView = NSHostingView(rootView: OverlayView())
-        overlayView.isHidden = true
-        contentView.addSubview(overlayView)
-
-        overlayWindow = window
-        overlayContentView = overlayView
-
-        // The surface must be ordered before Mission Control starts.
-        // Keep it compact so it cannot obscure desktop previews or create desktop-wide tracking areas.
-        window.orderFrontRegardless()
     }
 
     private func destroyOverlayWindow() {
-        overlayContentView?.removeFromSuperview()
-        overlayContentView = nil
-        overlayWindow?.close()
-        overlayWindow = nil
+        for surface in overlaySurfaces {
+            surface.contentView.removeFromSuperview()
+            surface.window.close()
+        }
+        overlaySurfaces.removeAll()
     }
 
     private func restartApp() {
