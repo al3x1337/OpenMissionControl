@@ -25,12 +25,14 @@ enum WindowAction: Int, CaseIterable, DisplayNameable {
     case zoom = 2
     case close = 3
     case quit = 4
+    case hide = 5
 
     var displayName: String {
         switch self { case .none: return "None" case .minimize: return "Minimize" case .zoom:
             return "Maximize"
             case .close: return "Close"
             case .quit: return "Quit"
+            case .hide: return "Hide"
         }
     }
 }
@@ -70,6 +72,8 @@ final class OpenMissionControlCore: ObservableObject {
         SettingsDefaults.shortcutMinimize
     @AppStorage(SettingsDefaults.Key.shortcutMaximize) private var shortcutMaximize: Bool =
         SettingsDefaults.shortcutMaximize
+    @AppStorage(SettingsDefaults.Key.shortcutHide) private var shortcutHide: Bool =
+        SettingsDefaults.shortcutHide
     @AppStorage(SettingsDefaults.Key.shortcutActivateWindow) private var shortcutActivateWindow:
         Bool = SettingsDefaults.shortcutActivateWindow
     @AppStorage(SettingsDefaults.Key.rightClickAction) private var rightClickAction: WindowAction =
@@ -288,6 +292,11 @@ final class OpenMissionControlCore: ObservableObject {
                     performWindowAction(window: window, action: .zoom, instigator: .keyboard)
                     return false
                 }
+            case .h:
+                if shortcutHide {
+                    performWindowAction(window: window, action: .hide, instigator: .keyboard)
+                    return false
+                }
             default: break
         }
 
@@ -413,7 +422,10 @@ final class OpenMissionControlCore: ObservableObject {
                     let showZoom =
                         UserDefaults.standard.object(forKey: SettingsDefaults.Key.showZoomButton)
                         as? Bool ?? SettingsDefaults.showZoomButton
-                    let buttonCount = [showQuit, showClose, showMinimize, showZoom].filter { $0 }
+                    let showHide =
+                        UserDefaults.standard.object(forKey: SettingsDefaults.Key.showHideButton)
+                        as? Bool ?? SettingsDefaults.showHideButton
+                    let buttonCount = [showQuit, showClose, showMinimize, showZoom, showHide].filter { $0 }
                         .count
                     let overlayWidth = sizing.width(buttonCount: buttonCount)
                     let windowWidth = overlayWidth + 2 * sizing.margin
@@ -485,6 +497,9 @@ final class OpenMissionControlCore: ObservableObject {
         let showZoom =
             UserDefaults.standard.object(forKey: SettingsDefaults.Key.showZoomButton) as? Bool
             ?? SettingsDefaults.showZoomButton
+        let showHide =
+            UserDefaults.standard.object(forKey: SettingsDefaults.Key.showHideButton) as? Bool
+            ?? SettingsDefaults.showHideButton
 
         if showQuit {
             if localX >= currentX, localX <= currentX + sizing.buttonSize {
@@ -513,6 +528,13 @@ final class OpenMissionControlCore: ObservableObject {
             }
             currentX += sizing.buttonStride
         }
+
+        if showHide {
+            if localX >= currentX, localX <= currentX + sizing.buttonSize {
+                performWindowAction(window: window, action: .hide, instigator: .overlay)
+            }
+            currentX += sizing.buttonStride
+        }
     }
 
     private func performWindowAction(
@@ -534,6 +556,10 @@ final class OpenMissionControlCore: ObservableObject {
             case .close:
                 logger.info("\(instigator.displayName) Close triggered on window: \(windowName)")
                 performOSWindowAction(window: window, action: kAXCloseButtonAttribute)
+            case .hide:
+                logger.info("\(instigator.displayName) Hide triggered on window: \(windowName)")
+                hideApplication(window: window)
+                hideOverlay(keepInputMonitoring: true)
             default: break
         }
     }
@@ -586,6 +612,23 @@ final class OpenMissionControlCore: ObservableObject {
         if let app = NSRunningApplication(processIdentifier: pid) {
             app.terminate()
             logger.info("Terminated application with PID \(pid)")
+        } else {
+            logger.error("Failed to get NSRunningApplication for PID \(pid)")
+        }
+    }
+
+    private func hideApplication(window: [String: Any]) {
+        guard let pid = window[kCGWindowOwnerPID as String] as? pid_t else {
+            logger.error("Failed to get PID for window: \(window)")
+            return
+        }
+
+        if let app = NSRunningApplication(processIdentifier: pid) {
+            if app.hide() {
+                logger.info("Hidden application with PID \(pid)")
+            } else {
+                logger.warning("Failed to hide application with PID \(pid)")
+            }
         } else {
             logger.error("Failed to get NSRunningApplication for PID \(pid)")
         }

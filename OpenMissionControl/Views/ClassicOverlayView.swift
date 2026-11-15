@@ -21,6 +21,8 @@ struct ClassicOverlayView: View {
         SettingsDefaults.showMinimizeButton
     @AppStorage(SettingsDefaults.Key.showZoomButton) private var showZoomButton: Bool =
         SettingsDefaults.showZoomButton
+    @AppStorage(SettingsDefaults.Key.showHideButton) private var showHideButton: Bool =
+        SettingsDefaults.showHideButton
 
     var body: some View {
         HStack(spacing: sizing.spacing) {
@@ -33,6 +35,8 @@ struct ClassicOverlayView: View {
             }
 
             if showZoomButton { trafficLight(color: .green, icon: .fullscreen, iconSize: 10) }
+
+            if showHideButton { trafficLight(color: .indigo, icon: .system("eye.slash"), iconSize: 11) }
         }
         .padding(.horizontal, sizing.horizontalPadding).padding(.vertical, sizing.verticalPadding)
         .background(Capsule().fill(Color(NSColor.windowBackgroundColor).opacity(0.95)))
