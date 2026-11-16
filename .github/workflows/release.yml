@@ -35,6 +35,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config checkout.defaultRemote origin
 
           if [ "${{ inputs.sync_upstream }}" = "true" ]; then
             echo "Fetching upstream..."
@@ -42,7 +43,7 @@ jobs:
             git fetch upstream --tags
 
             echo "Updating master branch to mirror upstream..."
-            git checkout master
+            git checkout -B master origin/master
             git merge --ff-only upstream/master || git reset --hard upstream/master
             git push origin master
 
