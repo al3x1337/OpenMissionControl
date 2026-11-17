@@ -341,11 +341,36 @@ final class OpenMissionControlCore: ObservableObject {
             return owner != "Dock" && owner != "WindowManager"
         }
 
-        let areEqual = NSArray(array: windows).isEqual(to: regularWindows)
+        let topLevelWindows = regularWindows.filter { window in
+            guard let pid = window[kCGWindowOwnerPID as String] as? pid_t,
+                let wid = window[kCGWindowNumber as String] as? CGWindowID,
+                let boundsDict = window[kCGWindowBounds as String] as? [String: CGFloat],
+                let x = boundsDict["X"], let y = boundsDict["Y"], let width = boundsDict["Width"],
+                let height = boundsDict["Height"]
+            else { return true }
+
+            let rect = CGRect(x: x, y: y, width: width, height: height)
+
+            let isChild = regularWindows.contains { other in
+                guard other[kCGWindowOwnerPID as String] as? pid_t == pid,
+                    other[kCGWindowNumber as String] as? CGWindowID != wid,
+                    let otherBounds = other[kCGWindowBounds as String] as? [String: CGFloat],
+                    let ox = otherBounds["X"], let oy = otherBounds["Y"],
+                    let owidth = otherBounds["Width"], let oheight = otherBounds["Height"]
+                else { return false }
+
+                let otherRect = CGRect(x: ox, y: oy, width: owidth, height: oheight)
+                return otherRect.contains(rect) && otherRect != rect
+            }
+
+            return !isChild
+        }
+
+        let areEqual = NSArray(array: windows).isEqual(to: topLevelWindows)
         if !areEqual {
             // Debug output
             logger.debug("=== Windows (\(filteredWindows.count)) ===")
-            for (index, window) in filteredWindows.enumerated() {
+            for (index, window) in topLevelWindows.enumerated() {
                 let name = window[kCGWindowName as String] as? String ?? "Unknown"
                 let owner = window[kCGWindowOwnerName as String] as? String ?? "Unknown"
                 let bounds = window[kCGWindowBounds as String] as? [String: CGFloat] ?? [:]
@@ -353,7 +378,7 @@ final class OpenMissionControlCore: ObservableObject {
                     "[\(index)] \(owner) - \(name) | bounds: \(String(describing: bounds))")
             }
 
-            windows = regularWindows
+            windows = topLevelWindows
         }
     }
 
