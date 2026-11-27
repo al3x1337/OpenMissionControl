@@ -42,6 +42,7 @@ class InputEventMonitor {
     fileprivate var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var consumedMouseButtons: Set<CGMouseButton> = []
+    private var hasShownPermissionAlert: Bool = false
 
     // MARK: - Move Monitoring (NSEvent)
 
@@ -93,13 +94,21 @@ class InputEventMonitor {
             | (1 << CGEventType.rightMouseDragged.rawValue)
             | (1 << CGEventType.otherMouseDragged.rawValue) | (1 << CGEventType.keyDown.rawValue)
 
+        if !CGPreflightListenEventAccess() {
+            logger.warning(
+                "Input Monitoring permission not granted; requesting ListenEvent access.")
+            _ = CGRequestListenEventAccess()
+        }
+
         guard
             let tap = CGEvent.tapCreate(
                 tap: .cghidEventTap, place: .headInsertEventTap, options: .defaultTap,
                 eventsOfInterest: eventMask, callback: inputEventMonitorCallback, userInfo: nil)
         else {
             logger.error(
-                "Failed to create input event tap. Please grant Accessibility permissions.")
+                "Failed to create input event tap. Please grant Accessibility and Input Monitoring permissions."
+            )
+            presentPermissionAlertIfNeeded()
             return
         }
 
@@ -125,6 +134,30 @@ class InputEventMonitor {
         eventTap = nil
         runLoopSource = nil
         logger.info("Input event tap stopped.")
+    }
+
+    private func presentPermissionAlertIfNeeded() {
+        guard !hasShownPermissionAlert else { return }
+        hasShownPermissionAlert = true
+
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Input Monitoring Permission Required"
+            alert.informativeText =
+                "Open Mission Control needs both Accessibility and Input Monitoring permissions to intercept clicks on overlay buttons.\n\nPlease enable Open Mission Control in System Settings → Privacy & Security → Input Monitoring, then restart the app."
+            alert.addButton(withTitle: "Open Input Monitoring Settings")
+            alert.addButton(withTitle: "Dismiss")
+
+            NSApp.activate(ignoringOtherApps: true)
+            if alert.runModal() == .alertFirstButtonReturn,
+                let url = URL(
+                    string:
+                        "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+            {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 
     // MARK: - Private: Move Monitoring
